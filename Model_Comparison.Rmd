@@ -1,0 +1,305 @@
+---
+title: 'Question 4: Comparing Methods'
+author: "Sydney Kahmann"
+date: "November 15, 2017"
+output:
+  word_document: default
+---
+
+4) For comparing R vs Cpp, QR vs sweep, please use spline regression, where the number of predictors is large. You can just report the time for you to finish the spline regression using the competing methods.
+
+```{r}
+set.seed(12345)
+n = 1000
+p = 200
+sigma = .1
+x = runif(n)
+x=sort(x)
+Y = x^2 + rnorm(n)*sigma
+```
+
+QR, Sweep, Spline functions to use in regression comparisons:
+```{r}
+setwd("C:/Users/Sydney/OneDrive/2017-18/202A/Homework")
+```
+
+```{r, eval=FALSE}
+library(Rcpp)
+sourceCpp("Sweep.cpp")
+```
+
+```{r}
+myQR <- function(A){
+
+  ## Perform QR decomposition on the matrix A
+  ## Input:
+  ## A, an n x m matrix
+
+  n <- nrow(A)
+  m <- ncol(A)
+  Q <- diag(n)
+  R <- A
+
+  for(k in 1:(m - 1)){
+    x      <- rep(0, n)
+    x[k:n] <- R[k:n, k]
+    s      <- -1 * sign(x[k])
+    v      <- x
+    v[k]   <- x[k] - s * norm(x, type = "2")
+    u      <- v / norm(v, type = "2")
+
+    R <- R - 2 * u %*% t(u) %*% R
+    Q <- Q - 2 * u %*% t(u) %*% Q
+
+  }
+
+  ## Function should output a list with Q.transpose and R
+  ## Q is an orthogonal n x n matrix
+  ## R is an upper triangular n x m matrix
+  ## Q and R satisfy the equation: A = Q %*% R
+  return(list("Q" = t(Q), "R" = R))
+
+}
+
+mySweep <- function(A, m){
+
+  # Perform a SWEEP operation on A with the pivot element A[m,m].
+  #
+  # A: a square matrix.
+  # m: the pivot element is A[m, m].
+  # Returns a swept matrix.
+
+  B <- A
+  n <- nrow(B)
+  
+  for(k in 1:m){ 
+    for(i in 1:n)     
+      for(j in 1:n)   
+        if(i != k  & j != k)     
+          B[i,j] <- B[i,j] - B[i,k]*B[k,j]/B[k,k]    
+        
+        for(i in 1:n) 
+          if(i != k) 
+            B[i,k] <- B[i,k]/B[k,k]  
+          
+          for(j in 1:n) 
+            if(j != k) 
+              B[k,j] <- B[k,j]/B[k,k]
+            
+            B[k,k] <- - 1/B[k,k]
+  }
+  
+  return(B)
+
+}
+
+mySpline <- function(x, Y, lambda, p = 200){
+
+  # Perform spline regression of Y on X.
+  #
+  # x: An n x 1 vector or matrix of explanatory variables.
+  # Y: An n x 1 vector of dependent variables. Y can also be a
+  # matrix, as long as the function works.
+  # lambda: regularization parameter (lambda >= 0)
+  # p: Number of cuts to make to the x-axis.
+
+  ##################################
+  ## FILL IN THIS SECTION OF CODE ##
+  ##################################
+
+  n = length(x)
+  X = matrix(x, nrow=n)
+
+  for (k in 1:(p-1)/p)
+    X = cbind(X, (x>k)*(x-k))
+
+  beta_spline = myRidge(X, Y, lambda)$beta_ridge
+  Yhat = cbind(rep(1, n), X)%*%beta_spline
+
+  ## Function should a list containing two elements:
+  ## The first element of the list is the spline regression
+  ## beta vector, which should be p + 1 dimensional (here,
+  ## p is the number of cuts we made to the x-axis).
+  ## The second element is y.hat, the predicted Y values
+  ## using the spline regression beta vector. This
+  ## can be a numeric vector or matrix.
+  output <- list(beta_spline = beta_spline, predicted_y = Yhat, BX=X)
+  return(output)
+}
+
+```
+
+
+R QR
+```{r}
+
+myRidge <- function(X, Y, lambda){
+
+  # Perform ridge regression of Y on X.
+  #
+  # X: an n x p matrix of explanatory variables.
+  # Y: an n vector of dependent variables. Y can also be a
+  # matrix, as long as the function works.
+  # lambda: regularization parameter (lambda >= 0)
+  # Returns beta, the ridge regression solution.
+
+  n = dim(X)[1]
+  p = dim(X)[2]
+  Z = cbind(rep(1, n), X)
+  A = t(Z) %*% Z
+  D = diag(rep(lambda, p+1))
+  D[1, 1] = 0
+  D[p+1, p+1] = 0
+  A = A + D
+  
+  ## Stack (X, Y) and solve it by QR decomposition
+  R <- myQR(A)$R
+  Q <- myQR(A)$Q
+    
+  beta_ridge = solve(R) %*% t(Q) %*% t(Z) %*% Y
+
+  ## Function should output the vector beta_ridge, the
+  ## solution to the ridge regression problem. beta_ridge
+  ## should have p + 1 elements.
+  Yhat = cbind(rep(1, n), X)%*%beta_ridge
+
+  ## Function should output the vector beta_ridge, the
+  ## solution to the ridge regression problem. beta_ridge
+  ## should have p + 1 elements.
+  output <- list(beta_ridge = beta_ridge, predicted_y = Yhat)
+  return(output)
+
+}
+
+ptm <- proc.time()
+junk <- mySpline(x,Y,lambda=1)
+proc.time() - ptm
+
+```
+
+
+R Sweep
+```{r}
+
+myRidge <- function(X, Y, lambda){
+
+  # Perform ridge regression of Y on X.
+  #
+  # X: an n x p matrix of explanatory variables.
+  # Y: an n vector of dependent variables. Y can also be a
+  # matrix, as long as the function works.
+  # lambda: regularization parameter (lambda >= 0)
+  # Returns beta, the ridge regression solution.
+
+  n = dim(X)[1]
+  p = dim(X)[2]
+  Z = cbind(rep(1, n), X, Y)
+  A = t(Z) %*% Z
+  D = diag(rep(lambda, p+2))
+  D[1, 1] = 0
+  D[p+2, p+2] = 0
+  A = A + D
+  S = mySweep(A, p+1)
+  beta_ridge = S[1:(p+1), p+2]
+
+  Yhat = cbind(rep(1, n), X)%*%beta_ridge
+
+  ## Function should output the vector beta_ridge, the
+  ## solution to the ridge regression problem. beta_ridge
+  ## should have p + 1 elements.
+  output <- list(beta_ridge = beta_ridge, predicted_y = Yhat)
+  return(output)
+
+}
+
+ptm <- proc.time()
+junk <- mySpline(x,Y,lambda=1)
+proc.time() - ptm
+
+```
+
+
+CPP QR
+```{r, eval=FALSE}
+
+myRidge <- function(X, Y, lambda){
+
+  # Perform ridge regression of Y on X.
+  #
+  # X: an n x p matrix of explanatory variables.
+  # Y: an n vector of dependent variables. Y can also be a
+  # matrix, as long as the function works.
+  # lambda: regularization parameter (lambda >= 0)
+  # Returns beta, the ridge regression solution.
+
+  n = dim(X)[1]
+  p = dim(X)[2]
+  Z = cbind(rep(1, n), X)
+  A = t(Z) %*% Z
+  D = diag(rep(lambda, p+1))
+  D[1, 1] = 0
+  D[p+1, p+1] = 0
+  A = A + D
+  
+  ## Stack (X, Y) and solve it by QR decomposition
+  R <- myQRC(A)$R
+  Q <- myQRC(A)$Q
+    
+  beta_ridge = solve(R) %*% t(Q) %*% t(Z) %*% Y
+
+  Yhat = cbind(rep(1, n), X)%*%beta_ridge
+
+  ## Function should output the vector beta_ridge, the
+  ## solution to the ridge regression problem. beta_ridge
+  ## should have p + 1 elements.
+  output <- list(beta_ridge = beta_ridge, predicted_y = Yhat)
+  return(output)
+
+}
+
+ptm <- proc.time()
+junk <- mySpline(x,Y,lambda=1)
+proc.time() - ptm
+
+```
+
+
+CPP Sweep
+```{r, eval=FALSE}
+
+myRidge <- function(X, Y, lambda){
+
+  # Perform ridge regression of Y on X.
+  #
+  # X: an n x p matrix of explanatory variables.
+  # Y: an n vector of dependent variables. Y can also be a
+  # matrix, as long as the function works.
+  # lambda: regularization parameter (lambda >= 0)
+  # Returns beta, the ridge regression solution.
+
+  n = dim(X)[1]
+  p = dim(X)[2]
+  Z = cbind(rep(1, n), X, Y)
+  A = t(Z) %*% Z
+  D = diag(rep(lambda, p+2))
+  D[1, 1] = 0
+  D[p+2, p+2] = 0
+  A = A + D
+  S = mySweepC(A, p+1)
+  beta_ridge = S[1:(p+1), p+2]
+
+  Yhat = cbind(rep(1, n), X)%*%beta_ridge
+
+  ## Function should output the vector beta_ridge, the
+  ## solution to the ridge regression problem. beta_ridge
+  ## should have p + 1 elements.
+  output <- list(beta_ridge = beta_ridge, predicted_y = Yhat)
+  return(output)
+
+}
+
+ptm <- proc.time()
+junk <- mySpline(x,Y,lambda=1)
+proc.time() - ptm
+
+```

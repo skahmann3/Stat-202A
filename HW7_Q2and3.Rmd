@@ -1,0 +1,203 @@
+---
+title: "Question2and3"
+author: "Sydney Kahmann"
+date: "November 27, 2017"
+output: pdf_document
+---
+
+```{r, echo = FALSE, warning=FALSE}
+library(knitr)
+opts_chunk$set(tidy.opts=list(width.cutoff=50),tidy=TRUE)
+```
+
+```{r, message=FALSE, warning=FALSE}
+library(pander)
+library(ggplot2)
+```
+
+### Loading in the R package
+
+```{r}
+library(HW6package)
+```
+
+
+### Question 2: Lasso Estimation Error Plot
+
+```{r}
+# prepping for variables
+n=50
+p=200
+s=10
+Tt=100
+
+# initialize variables
+X <- matrix(rnorm(n*(p)), nrow=n)
+b_true= matrix(rep(0,p), nrow=p)
+b_true[1:s]=c(1:s)
+Y <- X%*%b_true+rnorm(n)
+
+# Generating lambda, running Lasso Regression
+lambda_all = (100:1)*10
+Lbetas <- myLasso(X,Y,lambda_all)
+
+# Generating Yhat, MSE from Lasso Regression for all values of lambda
+Yhat <- matrix(0, nrow=50, ncol=ncol(Lbetas))
+MSE <- c(rep(0,100))
+for(i in 1:ncol(Lbetas)){
+    Yhat[,i] = cbind(rep(1, 50), X)%*%Lbetas[,i]
+    MSE[i] = mean((Yhat[,i]-Y)^2)
+}
+
+# Estimation Error plot using MSE
+plot(lambda_all, MSE)
+
+```
+
+### Question 3: Analyze some appropriate real datasets available in R using your package of least squares regression, ridge regression, Lasso regression, logistic regression, and PCA. Submit a pdf or .doc/.docx file with your results (e.g. explanations, tables, plots) showing your results and explaining what you see.
+
+### Generating X, Y using mtcars dataset to predict mpg:
+```{r}
+
+data(mtcars)
+# if want to predict mpg: Y <- mtcars[,1]
+Y <- as.matrix(mtcars[,1])
+X <- as.matrix(mtcars[,c(3:7)])
+
+# subset of X variables
+pander(head(X))
+
+# subset of Y variables
+pander(head(Y))
+
+```
+
+### Least Squares, Ridge, Lasso Regression for mtcars
+
+```{r}
+
+# Linear Regression output: 
+# [[1]] coefficients
+# [[2]] standard errors
+LM_results <- myLM(X,Y)
+
+# Ridge Regression outputs: coefficients
+Rresults <- myRidge(X,Y,10)
+
+# Lasso Regression outputs: coefficients for each value of lambda
+Lresults <- myLasso(X,Y, lambda_all)
+
+# Generating predicted Y values for each model
+LMYhat = cbind(rep(1, dim(X)[1]), X)%*%LM_results[[1]]
+RYhat = cbind(rep(1, dim(X)[1]), X)%*%Rresults
+LYhat = cbind(rep(1, dim(X)[1]), X)%*%Lresults[,100]
+
+```
+
+### Overview of Regression Results for Least Squares, Ridge, Lasso Regressions for mtcars
+
+For Least Squares, Ridge, and Lasso Regression I used disp, hp, drat, wt, and qsec to predict mpg from the built-in R dataset mtcars. 
+
+The Least Squares model has a much smaller intercept than our other two models, and has the most different coefficients from the other two models. Because the Least Squares regression model doesn't focus on shrinking or selecting variables, it has higher slopes for variables drat, wt, and qsec. However, the LS model does seem to give the largest magnitude coefficient to wt, which is our most heavily weighted variable in the other models. 
+
+The Ridge and Lasso models look very similar to each other. From the table below, we can see Ridge and Lasso have similar intercepts and coefficients for variables disp and hp. However, Lasso heavily weights variable wt while dropping variables drat and qsec from the model, while Ridge Regression places more importance on variables drat and wt while shrinking qsec. 
+
+While the Least Squares model may appear different from Ridge and Lasso based on the model coefficients alone, the fit is pretty similar when applied to this dataset, as seen in the plot below of wt vs the predicted Y for each model. 
+
+Overall, it appears variable wt is most significant in predicting mpg. 
+
+```{r}
+
+res <- cbind(LM_results[[1]],Rresults,Lresults[,100])
+colnames(res) <- c("Least Squares", "Ridge", "Lasso")
+pander(res)
+
+preds <- as.data.frame(cbind(LMYhat, RYhat, LYhat, X[,4]))
+colnames(preds) <- c("LS", "Ridge", "Lasso", "wt")
+ggplot(data=preds)+geom_line(aes(wt, LS, color="Least Squares"))+geom_line(aes(wt, Ridge, color="Ridge"))+geom_line(aes(wt, Lasso, color="Lasso"))+ labs(y = "Y hat")
+
+```
+
+### Using X*t(X) to create symmetric A matrix for PCA:
+```{r}
+
+# if want to predict mpg: Y <- mtcars[,1]
+Y <- as.matrix(mtcars[,1])
+X <- as.matrix(mtcars[,c(3:7)])
+
+A <- cov(X)
+
+```
+
+### PCA
+
+From the PCA of mtcars, we can see that the first component explains most of the variation, as shown by the size of the first eigenvalue in the plot vs the rest of the eigenvalue points in the plot. Therefore, we should use only the first component to reduce the dimensionality of our dataset.
+
+```{r}
+
+PCA <- myEigen_QR(A)
+PCA
+plot(PCA$D)
+```
+
+### Manipulating iris dataset to predict virginica (1), versicolor (0):
+
+```{r}
+
+data(iris)
+
+# selecting only species virginica, versicolor
+iris2 <- iris[which(iris$Species %in% c("virginica", "versicolor")),]
+iris2$Species <- as.character(iris2$Species)
+
+for(i in 1:dim(iris2)[1]){
+  if(iris2$Species[i]=="virginica"){
+    iris2$Species[i] = 1
+  }
+  else{
+    iris2$Species[i] = 0
+  }
+}
+
+# using variables Sepal.Length, Sepal.Width, Petal.Length, Petal.Width to predict the two species
+Y=as.matrix(as.numeric(iris2[,5]))
+X=as.matrix(apply(iris2[,-5], MARGIN = 2, as.numeric))
+
+# example of X variables
+pander(head(X))
+
+# example of Y variables
+pander(head(Y))
+
+```
+
+
+### Overview of Logistic Regression for iris
+
+For Logistic Regression I used Sepal.Length, Sepal.Width, Petal.Length, and Petal.Width to predict the species "virginica" and "versicolor" from the built-in R dataset iris. 
+
+The Logistic Regression did a good job of predicting the species of each plant using all of the iris X variables, as we can see only 5/100 plants were incorrectly predicted. 
+
+```{r}
+
+# Logistic Regression output: 
+# [[1]] coefficients
+# [[2]] standard errors
+l <- myLogistic(X,Y)
+l
+
+# Generating Yhat
+LogYhat = X%*%l[[1]]
+for(i in 1:length(LogYhat)){
+  if(LogYhat[i]<0){
+    LogYhat[i] = 0
+  }
+  else{
+    LogYhat[i]=1
+  }
+}
+
+# Y vs Yhat
+pander(table(Y, LogYhat))
+
+```

@@ -1,0 +1,284 @@
+---
+title: "Q5 - Plots of fitted curves"
+author: "Sydney Kahmann"
+date: "November 16, 2017"
+output: pdf_document
+---
+
+```{r}
+n = 200
+p = 100
+sigma = .1
+x = runif(n)
+x=sort(x)
+Y = x^2 + rnorm(n)*sigma
+```
+
+
+QR, Sweep, Spline functions to use in regression comparisons:
+```{r}
+##################################
+## Function 1: QR decomposition ##
+##################################
+
+myQR <- function(A){
+
+  ## Perform QR decomposition on the matrix A
+  ## Input:
+  ## A, an n x m matrix
+
+  ########################
+  ## FILL IN CODE BELOW ##
+  ########################
+
+  n <- nrow(A)
+  m <- ncol(A)
+  Q <- diag(n)
+  R <- A
+
+  for(k in 1:(m - 1)){
+    x      <- rep(0, n)
+    x[k:n] <- R[k:n, k]
+    s      <- -1 * sign(x[k])
+    v      <- x
+    v[k]   <- x[k] - s * norm(x, type = "2")
+    u      <- v / norm(v, type = "2")
+
+    R <- R - 2 * u %*% t(u) %*% R
+    Q <- Q - 2 * u %*% t(u) %*% Q
+
+  }
+
+  ## Function should output a list with Q.transpose and R
+  ## Q is an orthogonal n x n matrix
+  ## R is an upper triangular n x m matrix
+  ## Q and R satisfy the equation: A = Q %*% R
+  return(list("Q" = t(Q), "R" = R))
+
+}
+
+
+#################################
+## Function 2: Sweep operation ##
+#################################
+
+mySweep <- function(A, m){
+
+  # Perform a SWEEP operation on A with the pivot element A[m,m].
+  #
+  # A: a square matrix.
+  # m: the pivot element is A[m, m].
+  # Returns a swept matrix.
+
+  ########################
+  ## FILL IN CODE BELOW ##
+  ########################
+
+  B <- A
+  n <- nrow(B)
+  
+  for(k in 1:m){ 
+    for(i in 1:n)     
+      for(j in 1:n)   
+        if(i != k  & j != k)     
+          B[i,j] <- B[i,j] - B[i,k]*B[k,j]/B[k,k]    
+        
+        for(i in 1:n) 
+          if(i != k) 
+            B[i,k] <- B[i,k]/B[k,k]  
+          
+          for(j in 1:n) 
+            if(j != k) 
+              B[k,j] <- B[k,j]/B[k,k]
+            
+            B[k,k] <- - 1/B[k,k]
+  }
+  
+  return(B)
+
+}
+
+
+##################################
+## Function 3: Ridge regression ##
+##################################
+
+myRidge <- function(X, Y, lambda){
+
+  # Perform ridge regression of Y on X.
+  #
+  # X: an n x p matrix of explanatory variables.
+  # Y: an n vector of dependent variables. Y can also be a
+  # matrix, as long as the function works.
+  # lambda: regularization parameter (lambda >= 0)
+  # Returns beta, the ridge regression solution.
+
+  ##################################
+  ## FILL IN THIS SECTION OF CODE ##
+  ##################################
+
+  if(is.vector(X)==TRUE){
+      n = length(X)
+      p = 1
+  }
+  else{
+      n = dim(X)[1]
+      p = dim(X)[2]
+  }
+
+  Z = cbind(rep(1, n), X, Y)
+  A = t(Z) %*% Z
+  D = diag(rep(lambda, p+2))
+  D[1, 1] = 0
+  D[p+2, p+2] = 0
+  A = A + D
+  S = mySweep(A, p+1)
+  beta_ridge = S[1:(p+1), p+2]
+  Yhat = cbind(rep(1, n), X)%*%beta_ridge
+
+  ## Function should output the vector beta_ridge, the
+  ## solution to the ridge regression problem. beta_ridge
+  ## should have p + 1 elements.
+  output <- list(beta_ridge = beta_ridge, predicted_y = Yhat)
+  return(output)
+
+}
+
+
+####################################################
+## Function 4: Piecewise linear spline regression ##
+####################################################
+
+
+mySpline <- function(x, Y, lambda, p = 100){
+
+  # Perform spline regression of Y on X.
+  #
+  # x: An n x 1 vector or matrix of explanatory variables.
+  # Y: An n x 1 vector of dependent variables. Y can also be a
+  # matrix, as long as the function works.
+  # lambda: regularization parameter (lambda >= 0)
+  # p: Number of cuts to make to the x-axis.
+
+  ##################################
+  ## FILL IN THIS SECTION OF CODE ##
+  ##################################
+
+  n = length(x)
+  X = matrix(x, nrow=n)
+
+  for (k in 1:(p-1)/p)
+    X = cbind(X, (x>k)*(x-k))
+
+  beta_spline = myRidge(X, Y, lambda)$beta_ridge
+  Yhat = cbind(rep(1, n), X)%*%beta_spline
+
+  ## Function should a list containing two elements:
+  ## The first element of the list is the spline regression
+  ## beta vector, which should be p + 1 dimensional (here,
+  ## p is the number of cuts we made to the x-axis).
+  ## The second element is y.hat, the predicted Y values
+  ## using the spline regression beta vector. This
+  ## can be a numeric vector or matrix.
+  output <- list(beta_spline = beta_spline, predicted_y = Yhat, BX=X)
+  return(output)
+
+}
+
+```
+
+Fitted Regression Curves:
+```{r}
+library(ggplot2)
+
+lambda=.00001
+ridge1 <- myRidge(x,Y,lambda)$predicted_y
+spline1 <- mySpline(x,Y,lambda)$predicted_y
+
+lambda=.01
+ridge2 <- myRidge(x,Y,lambda)$predicted_y
+spline2 <- mySpline(x,Y,lambda)$predicted_y
+
+lambda=.05
+ridge3 <- myRidge(x,Y,lambda)$predicted_y
+spline3 <- mySpline(x,Y,lambda)$predicted_y
+
+lambda=.5
+ridge4 <- myRidge(x,Y,lambda)$predicted_y
+spline4 <- mySpline(x,Y,lambda)$predicted_y
+
+lambda=1.5
+ridge5 <- myRidge(x,Y,lambda)$predicted_y
+spline5 <- mySpline(x,Y,lambda)$predicted_y
+
+lambda=3
+ridge6 <- myRidge(x,Y,lambda)$predicted_y
+spline6 <- mySpline(x,Y,lambda)$predicted_y
+
+Rdata <- as.data.frame(cbind(ridge1, ridge2, ridge3, ridge4, ridge5, ridge6, x,Y, spline1, spline2, spline3, spline4, spline5, spline6))
+
+ggplot(data=Rdata)+geom_point(aes(x, Y), size=.75)+geom_line(aes(x, V1, color="Ridge, Lambda=.00001"), size=1)+geom_line(aes(x, V2, color="Ridge, Lambda=.01"), size=1)+geom_line(aes(x, V3, color="Ridge, Lambda=.05"), size=1)+geom_line(aes(x, V4, color="Ridge, Lambda=.5"), size=1)+geom_line(aes(x, V5, color="Ridge, Lambda=1.5"), size=1)+geom_line(aes(x, V6, color="Ridge, Lambda=3"), size=1)
+
+ggplot(data=Rdata)+geom_point(aes(x, Y), size=.75)+geom_line(aes(x, V9, color="Spline, Lambda=.00001"), size=1)+geom_line(aes(x, V10, color="Spline, Lambda=.01"), size=1)+geom_line(aes(x, V11, color="Spline, Lambda=.05"), size=1)+geom_line(aes(x, V12, color="Spline, Lambda=.5"), size=1)+geom_line(aes(x, V13, color="Spline, Lambda=1.5"), size=1)+geom_line(aes(x, V14, color="Spline, Lambda=3"), size=1)
+
+```
+
+```{r}
+set.seed(123)
+
+n = 200
+p = 100
+sigma = .1
+x = runif(n)
+x=sort(x)
+Y = x^2 + rnorm(n)*sigma
+
+xY <- as.data.frame(cbind(x,Y))
+
+train <- sample(c(1:200), 150, replace = FALSE)
+
+xtrain <- xY[train,1]
+ytrain <- xY[train,2]
+  
+xtest <- xY[-train,1]
+ytest <- xY[-train,2]
+
+lambda = seq(.01, 10,.1)
+rtrain <- rep(0,length(lambda))
+rpred <- c(rep(0,length(xtest)))
+rtest <- c(rep(0,length(lambda)))
+
+for(i in 1:length(lambda)){
+  ridge <- myRidge(xtrain,ytrain,lambda[i])
+  rtrain[i] <- mean((ytrain-ridge$predicted_y)^2)
+  rpred = cbind(rep(1, length(xtest)), xtest) %*% ridge$beta_ridge
+  rtest[i] <- mean((ytest-rpred)^2)
+}
+
+lambda = seq(1, 1000, 50)
+strain <- c(rep(0,length(lambda)))
+spred <- c(rep(0,length(xtest)))
+stest <- c(rep(0,length(lambda)))
+
+n = length(x)
+X = matrix(x, nrow=n)
+for (k in 1:(p-1)/p)
+  X = cbind(X, (x>k)*(x-k))
+  
+for(i in 1:length(lambda)){
+  spline <- mySpline(xtrain,ytrain,lambda[i])
+  strain[i] <- mean((ytrain-spline$predicted_y)^2)
+  spred = cbind(rep(1, 200), X) %*% spline$beta_spline
+  stest[i] <- mean((ytest-spred)^2)
+}
+
+lambda = seq(.01, 10,.1)
+Rerrordata <- as.data.frame(cbind(lambda, rtrain, rtest))
+ggplot(data=Rerrordata)+geom_line(aes(lambda,rtrain, color="Ridge Training Error"))+geom_line(aes(lambda, rtest, color="Ridge Testing Error"))
+
+lambda = seq(1, 1000, 50)
+Serrordata <- as.data.frame(cbind(lambda, strain, stest))
+ggplot(data=Serrordata)+geom_line(aes(lambda,strain, color="Spline Training Error"))+geom_line(aes(lambda, stest, color="Spline Testing Error"))
+
+```
+
